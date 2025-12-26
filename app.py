@@ -8,20 +8,15 @@ from PIL import Image
 # CONFIG
 # ======================================
 st.set_page_config(
-    page_title="CNN NASNetMobile - Deteksi Hama Daun Sawi",
+    page_title="🌿 CNN NASNetMobile - Deteksi Hama Daun Sawi",
     layout="centered"
 )
 
 MODEL_PATH = "NASNetMobile_Sawi_Final.h5"
 IMG_SIZE = (224, 224)
 
-CLASS_NAMES = {
-    0: "WITH PEST",
-    1: "WITHOUT PEST"
-}
-
 # ======================================
-# LOAD MODEL (CACHE)
+# LOAD MODEL
 # ======================================
 @st.cache_resource
 def load_model():
@@ -30,7 +25,7 @@ def load_model():
 model = load_model()
 
 # ======================================
-# IMAGE PREPROCESS
+# PREPROCESS IMAGE
 # ======================================
 def preprocess_image(image):
     image = image.resize(IMG_SIZE)
@@ -38,10 +33,9 @@ def preprocess_image(image):
     return np.expand_dims(img_array, axis=0)
 
 # ======================================
-# GRAD-CAM FUNCTIONS
+# GRAD-CAM
 # ======================================
 def make_gradcam_heatmap(img_array, model):
-    # cari last conv layer otomatis
     last_conv_layer = None
     for layer in reversed(model.layers):
         if len(layer.output.shape) == 4:
@@ -55,7 +49,7 @@ def make_gradcam_heatmap(img_array, model):
 
     with tf.GradientTape() as tape:
         conv_outputs, predictions = grad_model(img_array)
-        loss = predictions[:, 0]
+        loss = tf.squeeze(predictions)  # FIX binary output
 
     grads = tape.gradient(loss, conv_outputs)
     pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
@@ -65,6 +59,7 @@ def make_gradcam_heatmap(img_array, model):
 
     heatmap = np.maximum(heatmap, 0)
     heatmap /= np.max(heatmap) + 1e-8
+
     return heatmap
 
 def overlay_gradcam(image, heatmap, alpha=0.4):
@@ -78,40 +73,54 @@ def overlay_gradcam(image, heatmap, alpha=0.4):
 # ======================================
 # UI
 # ======================================
-st.title("🌱 Deteksi Hama Daun Sawi")
+st.title("🌿 Deteksi Hama pada Daun Sawi")
 st.markdown(
     "Model **CNN NASNetMobile** untuk mendeteksi **hama pada daun sawi** "
-    "dengan **visualisasi Grad-CAM**."
+    "dengan **Explainable AI (Grad-CAM)**."
 )
 
 uploaded_file = st.file_uploader(
-    "Upload gambar daun sawi",
+    "📤 Upload gambar daun sawi",
     type=["jpg", "jpeg", "png"]
 )
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Input Image", use_column_width=True)
+    st.image(image, caption="📷 Input Image", use_column_width=True)
 
     img_array = preprocess_image(image)
-    prediction = model.predict(img_array)[0][0]
+    pred = float(model.predict(img_array)[0])
 
-    if prediction < 0.5:
-        label = CLASS_NAMES[0]
-        confidence = 1 - prediction
+    # ==========================
+    # PREDICTION RESULT
+    # ==========================
+    st.subheader("🧠 Prediction Result")
+
+    if pred < 0.5:
+        label = "🚨 ADA HAMA"
+        confidence = (1 - pred) * 100
+        st.error(f"{label} ({confidence:.2f}%)")
     else:
-        label = CLASS_NAMES[1]
-        confidence = prediction
+        label = "✅ TANPA HAMA"
+        confidence = pred * 100
+        st.success(f"{label} ({confidence:.2f}%)")
 
-    st.subheader("🧠 Prediction")
-    st.write(f"**Class:** {label}")
-    st.write(f"**Confidence:** {confidence * 100:.2f}%")
+    st.progress(confidence / 100)
 
+    # ==========================
+    # DETAIL CONFIDENCE
+    # ==========================
+    st.markdown("### 📊 Confidence per kelas:")
+    st.write(f"- **Ada Hama** : {(1 - pred) * 100:.2f}%")
+    st.write(f"- **Tanpa Hama** : {pred * 100:.2f}%")
+
+    # ==========================
     # GRAD-CAM
+    # ==========================
     st.subheader("🔥 Grad-CAM Explanation")
     heatmap = make_gradcam_heatmap(img_array, model)
     gradcam_img = overlay_gradcam(image, heatmap)
     st.image(gradcam_img, caption="Grad-CAM Heatmap", use_column_width=True)
 
 st.markdown("---")
-st.caption("CNN NASNetMobile • Explainable AI (Grad-CAM)")
+st.caption("CNN NASNetMobile • Binary Classification • Explainable AI")
