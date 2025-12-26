@@ -3,74 +3,77 @@ import tensorflow as tf
 import numpy as np
 from PIL import Image
 
-# =============================
-# PAGE CONFIG
-# =============================
+# ===============================
+# CONFIG
+# ===============================
+IMG_SIZE = (224, 224)
+MODEL_PATH = "NASNetMobile_Sawi_Final.h5"
+
 st.set_page_config(
-    page_title="Deteksi Hama Sawi",
-    page_icon="🌱",
+    page_title="Deteksi Hama Daun Sawi",
+    page_icon="🌿",
     layout="centered"
 )
 
-st.title("🌱 Deteksi Hama pada Daun Sawi")
-st.write("Upload gambar daun sawi untuk mendeteksi **ADA HAMA** atau **TANPA HAMA**")
-
-# =============================
-# LOAD MODEL
-# =============================
+# ===============================
+# LOAD MODEL (CACHE)
+# ===============================
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model("NASNetMobile_Sawi_Final.h5")
+    model = tf.keras.models.load_model(MODEL_PATH)
+    return model
 
 model = load_model()
 
-CLASS_NAMES = ["with_pest", "without_pest"]
+# ===============================
+# UI
+# ===============================
+st.title("🌿 Deteksi Hama pada Daun Sawi")
+st.write("Upload gambar daun sawi untuk mendeteksi **ada hama atau tidak**.")
 
-# =============================
-# IMAGE PREPROCESS
-# =============================
-def preprocess_image(image):
-    image = image.convert("RGB")
-    image = image.resize((224, 224))
-    img_array = np.array(image) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
-    return img_array
-
-# =============================
-# FILE UPLOAD
-# =============================
 uploaded_file = st.file_uploader(
-    "📤 Upload Gambar Daun Sawi",
+    "Upload gambar daun sawi",
     type=["jpg", "jpeg", "png"]
 )
 
-if uploaded_file:
+# ===============================
+# PREPROCESS IMAGE
+# ===============================
+def preprocess_image(image):
+    image = image.convert("RGB")
+    image = image.resize(IMG_SIZE)
+    img_array = np.array(image) / 255.0   # WAJIB
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
+
+# ===============================
+# PREDICTION
+# ===============================
+if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Gambar yang diupload", use_container_width=True)
 
-    # =============================
-    # PREDICTION
-    # =============================
-    img_input = preprocess_image(image)
-    preds = model.predict(img_input)[0]
+    st.image(image, caption="Gambar yang diupload", use_column_width=True)
 
-    predicted_class = CLASS_NAMES[np.argmax(preds)]
-    confidence = np.max(preds) * 100
+    img_array = preprocess_image(image)
 
-    st.markdown("---")
-    st.subheader("🧠 Hasil Prediksi")
+    pred = model.predict(img_array)[0][0]
 
-    if predicted_class == "with_pest":
-        st.error(f"🚨 **ADA HAMA** ({confidence:.2f}%)")
+    # ======================================
+    # 🔥 LABEL FIX (PALING PENTING)
+    # ======================================
+    # Sesuai training:
+    # {'Ada_Hama': 0, 'Tanpa_Hama': 1}
+
+    if pred < 0.5:
+        label = "🚨 ADA HAMA"
+        confidence = (1 - pred) * 100
+        st.error(f"{label} ({confidence:.2f}%)")
     else:
-        st.success(f"✅ **TANPA HAMA** ({confidence:.2f}%)")
+        label = "✅ TANPA HAMA"
+        confidence = pred * 100
+        st.success(f"{label} ({confidence:.2f}%)")
 
-    st.write("📊 Confidence per kelas:")
-    for cls, prob in zip(CLASS_NAMES, preds):
-        st.write(f"- **{cls}** : {prob*100:.2f}%")
-
-# =============================
-# FOOTER
-# =============================
-st.markdown("---")
-st.caption("Model: NASNetMobile | Deep Learning CNN")
+    # Detail probabilitas
+    st.markdown("### 📊 Confidence per kelas:")
+    st.write(f"- **Ada Hama** : {(1 - pred) * 100:.2f}%")
+    st.write(f"- **Tanpa Hama** : {pred * 100:.2f}%")
