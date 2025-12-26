@@ -20,7 +20,7 @@ st.write("Upload gambar daun sawi untuk mendeteksi **ADA HAMA** atau **TANPA HAM
 # =============================
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model("NASNetMobile_Sawi_Final.h5'")
+    return tf.keras.models.load_model("NASNetMobile_Sawi_Final.h5")
 
 model = load_model()
 
